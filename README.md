@@ -60,7 +60,7 @@ The final models relax the proportional odds assumption where necessary and iden
 
 ## Author
 
-**Archit Nangavaram*  
+**Archit Nangavaram**
 Senior Undergraduate in Psychology minoring in Addiction Studies and Expressive Arts Therapy 
 📧 [archit.nangavaram01@utrgv.edu]  
 🔗 [https://www.linkedin.com/in/archit-nangavaram-10b899293/]
