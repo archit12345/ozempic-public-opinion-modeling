@@ -101,6 +101,7 @@ Variables relevant to opinions on GLP-1 medications and weight, as well as other
 ```{r}
 
 # CLEANING DATA, REMOVING NA VALUES AND CREATING FACTORS W/ LEVELS FOR EACH VARIABLE
+
 ozempic_survey_data <- ATP_W142 %>%
   dplyr::select(ozempic_opinion = REDUCOBES_W142, income_score = F_INC_TIER2, 
          genetics = FACTWGT_a_W142, OZread = OZHEARD_W142, OZUSE_a_W142, 
