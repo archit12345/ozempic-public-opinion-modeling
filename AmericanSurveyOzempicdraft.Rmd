@@ -1,0 +1,793 @@
+---
+title: "What Predicts Skepticism Towards New GLP-1 Weight Loss Medications Like Ozempic?"
+subtitle: "A Partial Proportional Odds Logistic Regression Analysis of U.S. Survey Data"
+author: "Archit Nangavaram"
+date: "2025-05-16"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(foreign)
+library(survey)
+library(knitr)
+library(ggthemes)
+library(tidymodels)
+library(glmnet)
+library(ordinal)
+library(stats)
+library(statsr)
+library(corrplot)
+library(effects)
+library(MASS)
+library(car)
+library(brant)
+library(forcats)
+library(brms)
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+install.packages("DT")
+library(DT)
+library(rmarkdown)
+library(rcompanion)
+library(nnet)
+library(GGally)
+library(VGAM)
+library(patchwork)
+library(gridExtra)
+library(ggeffects)
+
+ATP_W142 <- read_csv("/Users/architn./Desktop/Rcheatsheets/W142_Feb24/ATP W142.csv")
+```
+
+
+## Introduction
+With the recent rise of new weight loss drugs, particularly GLP-1 receptor antagonists like Ozempic & Wegovy, understanding demographic and attitudinal factors that may contribute to increased skepticism/pessimism towards the efficacy, utility and potential positive impact of these drugs may have useful clinical and public health implications. 
+
+This project uses publicly-available survey data from the American Trends Panel Wave 142 by the Pew Research Center published in 2024. The survey gathers opinions from around 10,000 participants on a variety of topical subjects ranging from cryptocurrency to ChatGPT. The current study will analyze responses from the survey that pertain to evaluating public perception of GLP-1 receptor antagonists,as well as which factors contribute to higher levels of skepticism of the drugs. 
+
+
+## Methods
+Data were collected from the American Trends Panel Wave 142 by the Pew Research Center published in 2024. A variety of demographic variables (e.g. gender, income, political party) and attitudinal/perceptual variables (e.g. belief of genetic factors in weight issues) were analyzed to evaluate predictors of increased skepticism towards the utility and efficacy of new weight loss medications like Ozempic. Perceived skepticism/pessimism towards the drugs was measured through participants' responses to the following two survey questions: 
+
+  1. (Support/Skepticism) Do you think Ozempic, Wegovy and other similar drugs are good options for weight loss for people with obesity or other weight-related health issues? (1 = Yes, 2 = Not sure, 3 = No)
+    
+  2. (Optimism/Pessimism) Over the long run, how much do you think Ozempic, Wegovy and other similar drugs will do to reduce obesity in America? (1 = Significant, 2 = Somewhat, 3 = Barely, 4 = Nothing)
+    
+Responses to question one will be saved under an outcome variable named *opinion_collapsed*. Responses are coded from 1-3 with higher scores indicating higher levels of skepticism. 
+
+Responses to question two will be saved under an outcome variable named *OZUSE_a_W142*. Responses are coded from 1-4 with higher scores indicating higher levels of pessimism. 
+    
+
+The demographic/attitudinal predictor variables that will be used to compute our logistic models are listed below below:
+  
+**Predictor Variables**
+    
+  1. gender - (1 = Male, 2 = Female, 3 = Non-binary)
+    
+  2. partylean - (1 = Republican, 2 = Democrat)
+    
+  3. income_score - (1 = Lower Income, 2 = Middle Income, 3 = High Income))
+    
+  4. OZread - Measures self-reported level of exposure to information about drugs like Ozempic.The question evaluating this variable reads: "How much have you read or heard about Ozempic, Wegovy or other drugs that are being used for weight loss?" (1 = A little, 2 = A lot)
+    
+  5. genetics_collapsed - Measures the extent to which participants believe obesity can be causally attributed to genetics. The question that measures this variable reads: "How much do you think genetics affects a person's weight?" (1 = Low, 2 = Some, 3 = Quite a lot, 4 = A great deal)
+  
+
+### Hypothesis
+
+My hypotheses are as follows: 
+
+   **H1**: Women will be more pessimistic and skeptical of the new wave of drugs due to being  the target demographic of multiple failed weight loss medications over the past few decades.
+  
+   **H2**: Less belief in genetic component to weight gain will lead to increase in negative pessimism and skepticism towards weight loss drugs like Ozempic. 
+  
+   **H3**: Reading and hearing less about drugs like Ozempic will be associated with and increase in negative attitudes towards the medication. 
+  
+   **H4**: Republicans will be more skeptical of drugs like Ozempic, due to a higher level of distrust in scientists and healthcare institutions in general. 
+  
+   **H5**: Higher income group will be associated with greater optimisim and trust in the new wave of weight loss drugs due to a higher likelihood of obtaining the medications at their high price point. 
+      
+      
+      
+
+#### Gathering & Preparing Relevant Data for Analysis
+Variables relevant to opinions on GLP-1 medications and weight, as well as other demographic variables, were selected from the American Trends Panel data and saved into a separate dataset. Variables were renamed for easier interpretation and filtered to exclude responses where participants refused to respond. The dataset was then filtered to exclude any NA values. The final dataset was named ozempic_survey_data_clean and contained responses from 2155 participants (n = 2155). 
+
+
+```{r}
+
+# CLEANING DATA, REMOVING NA VALUES AND CREATING FACTORS W/ LEVELS FOR EACH VARIABLE
+ozempic_survey_data <- ATP_W142 %>%
+  dplyr::select(ozempic_opinion = REDUCOBES_W142, income_score = F_INC_TIER2, 
+         genetics = FACTWGT_a_W142, OZread = OZHEARD_W142, OZUSE_a_W142, 
+         partylean = F_PARTYLN_FINAL, gender = F_GENDER) %>%
+  filter(ozempic_opinion < 6, income_score < 98, genetics < 98, 
+         OZread < 98,  partylean < 98,  gender < 3, OZUSE_a_W142 < 98) 
+
+ozempic_survey_data_clean <- na.omit(ozempic_survey_data)
+
+
+kable(head(ozempic_survey_data_clean))
+
+```
+
+
+#### Factorizing, Defining Levels, and Collapsing Low Responses
+
+Variables were then saved as ordered factors with defined levels. The code where this was perforeed is supplied below (click 'show' to see the code). The outcome variables were reverse-coded such that higher numbers = higher levels of skepticism towards new weight loss medications. Predictor variables were forward-coding with higher numbers = more of the variable (e.g. higher number in income_score = higher income). 
+
+A summary of all the variables and number of responses for each answer choice is shown in the output below.  
+
+
+```{r}
+
+# Createing Ordered Factors + Defining Levels
+
+ ozempic_survey_data_clean$ozempic_opinion <- 
+  factor(ozempic_survey_data_clean$ozempic_opinion, ordered = TRUE, 
+         levels = c(1,2,3,4,5,6, 99), 
+         labels = c("A great deal", "Quite a bit", "Some", 
+                    "Not too much", "Nothing at all", "Not sure", "Refused"))
+
+  ozempic_survey_data_clean$OZUSE_a_W142 <- 
+    factor(ozempic_survey_data_clean$OZUSE_a_W142, ordered = TRUE, 
+           levels=c(1,2,3,99), 
+           labels = c("Yes", "Not sure", "No", "Refused"))
+
+
+  ozempic_survey_data_clean$income_score <- 
+    factor(ozempic_survey_data_clean$income_score, ordered = TRUE, 
+           levels = c(1,2,3,99), 
+           labels = c("Lower Income", "Middle Income", "Upper Income", "Refused"))
+
+  
+  ozempic_survey_data_clean$genetics <- 
+    factor(ozempic_survey_data_clean$genetics, ordered = TRUE, 
+           levels = c(99,5,4,3,2,1), 
+           labels = c("Refused", "Not at all", "Not too much", 
+                      "Some", "Quite a bit", "A great deal"))
+  
+
+  ozempic_survey_data_clean$OZread <- 
+    factor(ozempic_survey_data_clean$OZread, ordered = TRUE, 
+           levels = c(99,3,2,1), 
+           labels = c("Refused", "Nothing at all", "A little", "A lot"))
+  
+
+  ozempic_survey_data_clean$partylean <- 
+    factor(ozempic_survey_data_clean$partylean, ordered = TRUE, 
+           levels = c(1,2,99), 
+           labels =c("Republican", "Democrat", "Refused"))
+  
+  
+  
+  ozempic_survey_data_clean$gender <- 
+    factor(ozempic_survey_data_clean$gender, ordered = TRUE, 
+           levels=c(1,2,3,99), 
+           labels = c("Male", "Female", "Non-binary", "Refused"))
+
+
+str(ozempic_survey_data_clean) # Ensuring all variables are properly stored as factors
+summary(ozempic_survey_data_clean)
+```
+
+
+Next, answer choices that were selected by 0 participants were dropped from the dataset. Answer choices with low numbers of observations were collapsed (combined) when it made logical sense. For example, the genetics_collapsed had very low observations in the 'Not at all' group (n = 17) and the 'Not too much' group (n = 91). These two groups were combined into a new group, 'Low' (n = 108). 
+
+
+```{r}
+
+# Dropping factor levels with excluded observations
+ozempic_survey_data_clean <- droplevels(ozempic_survey_data_clean) 
+
+# Collapsing levels in response categories with low observations.
+
+ozempic_survey_data_clean$genetics_collapsed <- fct_collapse(
+  ozempic_survey_data_clean$genetics,
+  Low = c("Not too much", "Not at all"),
+  Some = "Some",
+  "Quite a bit" = "Quite a bit",
+  "A great deal" = "A great deal"
+)
+
+ozempic_survey_data_clean$opinion_collapsed <- fct_collapse(
+  ozempic_survey_data_clean$ozempic_opinion,
+  "A lot" = c("Quite a bit", "A great deal"),
+  Some = "Some",
+  "Not too much" = "Not too much", 
+  "Nothing at all" = "Nothing at all"
+) # Combined 'A great deal' and "'Quite a bit' groups to account for low observations. 
+
+
+```
+
+The finalized factor levels and first 6 rows of the cleaned dataset are shown below.  
+
+```{r}
+
+summary(ozempic_survey_data_clean) #Making sure the data looks good.
+
+kable(head(ozempic_survey_data_clean)) # Viewing the head of the cleaned dataset 
+
+```
+ 
+
+### Data Visualization
+Before computing the logistic regression models, data were visualized to get an idea of what sort of trends or relationships exist between our variables. What demographic features make someone more optimistic about new weight loss drugs like Ozempic and their future impact on obesity in America? What makes them more skeptical? 
+
+
+#### Overall Public Attitudes Towards Weight Loss Medications Like Ozempic
+
+```{r plot-ozempic-opinion, fig.height = 7.5, fig.width = 12, fig.align='center', echo = FALSE}
+# Adding observation counts to the top of the bars
+tab1 <- data.frame(xtabs(~ opinion_collapsed, data = ozempic_survey_data_clean))
+
+# Creating plots
+ozempic_opinion_plot <- 
+  
+ggplot(ozempic_survey_data_clean, aes(x = opinion_collapsed, fill = opinion_collapsed)) + 
+  geom_bar() + 
+  geom_text(data = tab1, aes(y = Freq, label = Freq), position = "stack", size = 3, vjust =-0.5, color = 'black') + 
+  labs(title = "Over the long run, how much do you think Ozempic and\nother similar drugs will do to reduce obesity in America?\n(n = 2,155)", 
+       x = "More Pessimism  ->", 
+       y = NULL, 
+       fill = "Response") +
+  theme_minimal() + 
+  theme(legend.title = element_text(face = "bold"), 
+        plot.title = element_text(face = "bold"), 
+        axis.title.y = element_text(face = "bold", 
+                                    vjust = 1), 
+        axis.title.x = element_text(face = "italic", 
+                                    vjust = 5), 
+        legend.text = element_text(face = "italic"), 
+        axis.text.x = element_text(face = "bold", 
+                                   vjust = 10), 
+        panel.grid.major.x = element_blank()) + 
+  scale_fill_brewer()
+
+# Adding observation counts to the top of bars
+tab2 <- data.frame(xtabs(~ OZUSE_a_W142, data = ozempic_survey_data_clean))
+
+# Creating plots
+OZUSE_plot <- 
+  
+ggplot(ozempic_survey_data_clean, aes(x = OZUSE_a_W142, fill = OZUSE_a_W142)) + 
+  geom_bar() + 
+  geom_text(data = tab2, aes(y = Freq, label = Freq), position = "stack", size= 3, vjust = -0.5) + 
+  labs(title = "Do you think Ozempic, Wegovy and other similar drugs\nare good options for weight loss for people with obesity\nor a weight-related health condition? (n = 2,155)", 
+       x = "More Skepticism ->", 
+       y = NULL, 
+       fill = "Response") +
+  theme_minimal() + 
+  theme(legend.title = element_text(face = "bold"), 
+        plot.title = element_text(face = "bold"), 
+        axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "italic", 
+                                    vjust = 5), 
+        legend.text = element_text(face = "italic"), 
+        axis.text.x = element_text(face = "bold", 
+                                   vjust = 10), 
+        panel.grid.major.x = element_blank()) + 
+  scale_fill_brewer()
+
+
+OZUSE_plot + ozempic_opinion_plot # Viewing both plots side-by-side
+```
+The figures above suggest that most people surveyed believe that weight loss drugs like Ozempic are a good option for individuals with obesity or weight-related health issues, and that drugs like Ozempic will have at least *some* impact on reducing obesity in America. Most people seem to be optimistic about these medications, but what are the factors that make some people more skeptical/pessimistic? 
+
+#### Visualizing Predictor Variables' Impact on Levels of Skepticism/Pessimism of Weight Loss Drugs Like Ozempic
+
+The figures below visualize how the 5 predictor variables in this study are related to participant's responses to the question: *"Over the long run, how much do you think Ozempic and other similar drugs will do to reduce obesity in America?"* 
+
+
+```{r plot-opinioncollapsed-differences, fig.height = 13, fig.width = 13, fig.align='center'}
+
+# Visualizing Gender Differences 
+
+gender_plot <- 
+
+ggplot(ozempic_survey_data_clean, aes(x = opinion_collapsed, fill = gender)) + 
+  geom_bar(position = "fill") + 
+  labs(title = "Over the long run, how much do you think Ozempic and other\nsimilar drugs will do to reduce obesity in America?", 
+       x = "More Pessimism  -->", 
+       y = "Response Percentage", 
+       fill = "Gender") +
+  theme_minimal() + 
+  theme(legend.title = element_text(face = "bold"), 
+        plot.title = element_text(face = "bold"), 
+        axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "italic"), 
+        legend.text = element_text(face = "italic"), 
+        axis.text.x = element_text(face = "bold")) + 
+  scale_fill_brewer()+ 
+  scale_y_continuous(labels = scales::percent)
+
+# Visualising Differences in Belief of Genetic Factor in Weight Gain
+
+genetic_plot <-  
+  
+  ggplot(ozempic_survey_data_clean, aes(x = opinion_collapsed, fill = genetics_collapsed)) + 
+  geom_bar(position = "fill") + 
+  theme_minimal() + 
+  labs(title = "Over the long run, how much do you think Ozempic and other\nsimilar drugs will do to reduce obesity in America?", 
+       x = "More Pessimism  -->", 
+       y = "Response Percentage", 
+       fill = "How big of a role\ndoes genetics play\nin weight gain?") +
+  theme(legend.title = element_text(face = "bold"), 
+        plot.title = element_text(face = "bold"), 
+        axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "italic"), 
+        legend.text = element_text(face = "italic"), 
+        axis.text.x = element_text(face = "bold")) + 
+  scale_fill_brewer() + 
+  scale_y_continuous(labels = scales::percent)
+
+
+# Visualizing Income Differences
+
+income_plot <-  
+  
+  ggplot(ozempic_survey_data_clean, aes(x = opinion_collapsed, fill = income_score)) + 
+  geom_bar(position = "fill") + 
+  theme_minimal() + 
+  labs(title = "Over the long run, how much do you think Ozempic and other\nsimilar drugs will do to reduce obesity in America?", 
+       x = "More Pessimism  -->", 
+       y = "Response Percentage", 
+       fill = "Income Group")+
+  theme(legend.title = element_text(face = "bold"), 
+        plot.title = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "italic"), 
+        axis.title.y = element_text(face = "bold"), 
+        axis.text = element_text(face = "italic"),
+        legend.text = element_text(face = "italic"), 
+        axis.text.x = element_text(face = "bold"))  + 
+  scale_fill_brewer() + 
+  scale_y_continuous(labels = scales::percent)
+
+
+
+# Visualizing Political Party Differences 
+
+party_plot <-  
+  
+  ggplot(ozempic_survey_data_clean, aes(x = opinion_collapsed, fill = partylean)) + 
+    geom_bar(position = "fill") + 
+    theme_minimal() + 
+    labs(title = "Over the long run, how much do you think Ozempic and other\nsimilar drugs will do to reduce obesity in America?", 
+         x = "More Pessimism  -->", 
+         y = "Response Percentage", 
+         fill = "Politcal Party") +
+  theme(legend.title = element_text(face = "bold"), 
+        plot.title = element_text(face = "bold"), 
+        axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "italic"), 
+        legend.text = element_text(face = "italic"), 
+        axis.text.x = element_text(face = "bold")) + 
+    scale_fill_brewer() + 
+    scale_y_continuous(labels = scales::percent)
+
+
+# Visualizing Differences in Level of Information Exposure
+
+exposure_plot <- 
+  
+ggplot(ozempic_survey_data_clean, aes(x = opinion_collapsed, fill = OZread)) + 
+  geom_bar(position = "fill") + 
+  theme_minimal() + 
+  labs(title = "Over the long run, how much do you think Ozempic and other\nsimilar drugs will do to reduce obesity in America?", 
+       x = "More Pessimism  -->", 
+       y = "Response Percentage", 
+       fill = "Exposure to media\nabout drugs like\nOzempic") +
+  theme(legend.title = element_text(face = "bold"), 
+        plot.title = element_text(face = "bold"), 
+        axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "italic"), 
+        legend.text = element_text(face = "italic"), 
+        axis.text.x = element_text(face = "bold")) + 
+  scale_fill_brewer() + 
+  scale_y_continuous(labels = scales::percent)
+
+# Viewing the plots in a grid. 
+grid.arrange(gender_plot, party_plot, income_plot, exposure_plot, genetic_plot, ncol = 2)
+```
+As we move to the right of each graph, it is assumed that the level of *pessimism* in our participants increases. Some clear trends start to emerge. 
+
+Contrary to my hypothesis, it seems woman are actually less pessimistic about new weight loss drugs and make up a smaller percentage of those who responded 'Nothing at all'. This would suggest men are more pessimistic about the impact new medications like Ozempic will have on reducing obesity in America. 
+
+
+Next, visualizations were created to examine the same predictor variables relationships' to our participants responses to the second question: *"Do you think Ozempic, Wegovy and other similar drugs are good options for weight loss for individuals with obesity or a weight-related health issue?"*.  
+
+
+```{r plot-ozuse-differences, fig.height = 13, fig.width = 13, fig.align='center'}
+
+# Visualizing gender differences 
+
+gender_OZUSE_plot <- 
+
+ggplot(ozempic_survey_data_clean, aes(x = OZUSE_a_W142, fill = gender)) + 
+  geom_bar(position = "fill") + 
+  labs(title = "Do you think Ozempic, Wegovy and other similar drugs are\ngood options for weight loss for individuals with\nobesity or a weight-related health issue?", 
+       x = "More Skepticism  -->", 
+       y = "Response Percentage", 
+       fill = "Gender") +
+  theme_minimal() + 
+  theme(legend.title = element_text(face = "bold"), 
+        plot.title = element_text(face = "bold"), 
+        axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "italic"), 
+        legend.text = element_text(face = "italic"), 
+        axis.text.x = element_text(face = "bold")) + 
+  scale_fill_brewer()+ 
+  scale_y_continuous(labels = scales::percent)
+
+# Visualising differences in belief of genetic factor in weight gain
+
+genetic_OZUSE_plot <-  
+  
+  ggplot(ozempic_survey_data_clean, aes(x = OZUSE_a_W142, fill = genetics_collapsed)) + 
+  geom_bar(position = "fill") + 
+  theme_minimal() + 
+  labs(title = "Do you think Ozempic, Wegovy and other similar drugs are\ngood options for weight loss for individuals with\nobesity or a weight-related health issue?", 
+       x = "More Skepticism  -->", 
+       y = "Response Percentage", 
+       fill = "How big of a role\ndoes genetics play\nin weight gain?") +
+  theme(legend.title = element_text(face = "bold"), 
+        plot.title = element_text(face = "bold"), 
+        axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "italic"), 
+        legend.text = element_text(face = "italic"), 
+        axis.text.x = element_text(face = "bold")) + 
+  scale_fill_brewer() + 
+  scale_y_continuous(labels = scales::percent)
+
+
+# Visualizing income differences
+
+income_OZUSE_plot <-  
+  
+  ggplot(ozempic_survey_data_clean, aes(x = OZUSE_a_W142, fill = income_score)) + 
+  geom_bar(position = "fill") + 
+  theme_minimal() + 
+  labs(title = "Do you think Ozempic, Wegovy and other similar drugs are\ngood options for weight loss for individuals with\nobesity or a weight-related health issue?", 
+       x = "More Skepticism  -->", 
+       y = "Response Percentage", 
+       fill = "Income Group")+
+  theme(legend.title = element_text(face = "bold"), 
+        plot.title = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "italic"), 
+        axis.title.y = element_text(face = "bold"), 
+        axis.text = element_text(face = "italic"),
+        legend.text = element_text(face = "italic"), 
+        axis.text.x = element_text(face = "bold"))  + 
+  scale_fill_brewer() + 
+  scale_y_continuous(labels = scales::percent)
+
+
+
+# Visualizing Political Party Differences in Perceptions of Ozempic efficacy
+
+party_OZUSE_plot <-  
+  
+  ggplot(ozempic_survey_data_clean, aes(x = OZUSE_a_W142, fill = partylean)) + 
+    geom_bar(position = "fill") + 
+    theme_minimal() + 
+    labs(title = "Do you think Ozempic, Wegovy and other similar drugs are\ngood options for weight loss for individuals with\nobesity or a weight-related health issue?", 
+         x = "More Skepticism  -->", 
+         y = "Response Percentage", 
+         fill = "Politcal Party") +
+  theme(legend.title = element_text(face = "bold"), 
+        plot.title = element_text(face = "bold"), 
+        axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "italic"), 
+        legend.text = element_text(face = "italic"), 
+        axis.text.x = element_text(face = "bold")) + 
+    scale_fill_brewer() + 
+    scale_y_continuous(labels = scales::percent)
+
+
+# Visualizing exposure to ozempic-related information
+
+exposure_OZUSE_plot <- 
+  
+ggplot(ozempic_survey_data_clean, aes(x = OZUSE_a_W142, fill = OZread)) + 
+  geom_bar(position = "fill") + 
+  theme_minimal() + 
+  labs(title = "Do you think Ozempic, Wegovy and other similar drugs are\ngood options for weight loss for individuals with\nobesity or a weight-related health issue?", 
+       x = "More Skepticism  -->", 
+       y = "Response Percentage", 
+       fill = "Exposure to media\nabout drugs like\nOzempic") +
+  theme(legend.title = element_text(face = "bold"), 
+        plot.title = element_text(face = "bold"), 
+        axis.title.y = element_text(face = "bold"), 
+        axis.title.x = element_text(face = "italic"), 
+        legend.text = element_text(face = "italic"), 
+        axis.text.x = element_text(face = "bold")) + 
+  scale_fill_brewer() + 
+  scale_y_continuous(labels = scales::percent)
+
+# Viewing the plots in a grid. 
+grid.arrange(gender_OZUSE_plot, party_OZUSE_plot, income_OZUSE_plot, exposure_OZUSE_plot, genetic_OZUSE_plot, ncol = 2)
+```
+As we move to the right of each graph, it is assumed that the level of *skepticism* in our participants is increasing. Some clear trends start to emerge here as well. 
+
+The most striking trend seems to be that those who have read or heard less about drugs like ozempic seem to be more skeptical of them. They make up the vast majority of those who answered 'No'. 
+
+Those in the upper income group were more likely to respond, 'Yes' than those in the lower income group.
+
+There seem's to be no markable gender differences in responses to this question, other than females being very slightly less likely to respond, 'No', than males. 
+
+
+
+
+## Ordinal Logistic Regression & Its' Assumptions
+
+Two separate ordinal logistic regression models were initially used, however later tests showed that one of the assumptions of ordinal regression was not met. Because of this, I will simply provide my rational for using the model, a brief discussion of the assumptions of ordinal logistic regression, and the tests ran to evaluate the assumptions in the models. 
+
+The rational behind the use of ordinal logistic regression is due to having outcome variables that are categorical and ordinal. Ordinal logistic regression can also handle multiple predictor variables that are also categorical and ordinal. 
+
+The code to create the ordinal logistic regression models are provided below, however their outputs are not included (click show to view code). 
+
+```{r}
+
+# Null Model Creation
+nullmodel1 <- polr(opinion_collapsed ~ 1, data = ozempic_survey_data_clean, 
+                  Hess = TRUE)
+
+# Emperimental Model Creation
+polrmodel1 <- polr(opinion_collapsed ~ gender +  genetics_collapsed + OZread + 
+                     partylean + income_score, data = ozempic_survey_data_clean, 
+                     Hess = TRUE)
+
+# An anova test was performed to compare the experimental model to the null model. It has been turned into a comment to prevent it's output. 
+
+  ## anova(nullmodel1, polrmodel1)
+
+# Result outputs have been turned into comments to prevent it from showing. 
+
+  ## summary(polrmodel1)
+  ## plot(allEffects(polrmodel1))
+  ## AIC(polrmodel1)
+  ## nagelkerke(polrmodel1)
+
+```
+ 
+
+
+```{r plot-effects-ozuse, fig.height = 10, fig.width = 10, fig.align= 'center'}
+
+# Creation of experimental model 2
+ozuse_model <- polr(OZUSE_a_W142 ~ gender + genetics_collapsed + OZread + income_score +
+                     partylean, data = ozempic_survey_data_clean, Hess = TRUE)
+
+# Outputs for the model have been made into comments to prevent their output. 
+
+## summary(oz_usemodel)
+## plot(allEffects(ozuse_model))
+## AIC(ozuse_model)
+## nagelkerke(ozuse_model)
+
+```
+*These initial models using the proportional odds assumption confirmed much of was found in the earlier data visualization. However, because key predictors violated this assumption, these results are not reliable and are not interpreted further.* 
+
+
+### Ordinal Logistic Regression Model Assumptions
+
+There are two important assumptions that are needed to use an ordinal logistic regressional model. One is that there is no **multicolinearity.** This occurs when two or more variables are highly correlated so that it is hard to differentiate between their impact on the model. This can lead to decreased model accuracy and coefficients that are difficult to interpret. *The models passed this with flying colors*
+
+Secondly, the assumption of **proportional odds.** This means that if a characteristic (e.g. being a democrat),  increases your odds of answering that Ozempic will help obesity in America, those odds should increase equally at each step up the ordinal scale (Not too much - Some, Some - A lot). This is important because it ensures the validity of our model. *This is the assumption the initial models violated*
+
+Multicolinearity was tested for using the vif() function on both of the experimental models. 
+```{r}
+vif(polrmodel1)
+vif(ozuse_model)
+```
+Since none of the values are above 10, that means there is no multicolinearity detected amongst variables in the experimental models.
+
+
+
+A Brant test was used to test for the proportional odds assumption using the brant() function in R. 
+```{r}
+brant(polrmodel1)
+brant(ozuse_model)
+```
+The proportional odds assumption was violated in both of our models. In our first model, genetics_collapsed.Q, and OZread.L both violate the assumption as indicated by a probability value of 0. In the second model, genetics_collapsed.L, OZread.L, and partylean.L also did not meet the proportional odds assumption.
+
+This is not entirely uncommon when making ordinal logistic regression models using categorical survey data. 
+
+To deal with this violation, two separate partial proportional odds model, which relax the proportional odds assumption for the variables that fail to meet it, were favored.
+
+
+## Data Analysis: Partial Proportional Odds Models 
+#### (Final Models)
+A partial proportional odds regression model was opted for because it relaxes the proportional odds assumption for the variables which violated it in our initial models. This allows for a more flexible model that can be trusted. 
+
+Two separate partial proportional odds logistic regression models were computed using the vglm() function in R. All statistical analysis was run in RStudio Version 2024.12.1+563 (2024.12.1+563).  
+
+The dependent variable for the first model was participants' *pessimism* towards weight loss medications based on responses to question 1 (opinion_collapsed):
+
+  *"Over the long run, how much do you think Ozempic and other similar drugs will do to reduce obesity in America?"* (1 - A lot, 2 - Some, 3 - Not too much, 4 - Nothing at all)
+
+The dependent variable for the second model was participants' *skepticism* towards weight loss medications based on responses to question 2 (OZUSE_a_W142):
+  
+  *"Do you think Ozempic, Wegovy and other similar drugs are good options for weight loss for individuals with obesity or a weight-related health issue?"* (1 - Yes, 2 - Not sure, 3 - No)
+
+
+The predictor variables for both models were gender (gender), causal attribution of genetics to obesity (genetics_collapsed), political party affiliation (partylean), level of exposure to weight loss drug-related information (OZread), and income level (income_score). 
+
+#### Results and Probability Plots for Experimental Partial Proportional Odds Model 1: (dependent variable = *opinion_collapsed*)
+This model examines the relationship between the 5 predictor variables and the level of *pessimism* in participant's responses. 
+
+```{r}
+# Creating a null model for comparision
+null_model <- vglm(opinion_collapsed ~ 1, family = cumulative(parallel = FALSE, 
+                                                              reverse = TRUE), 
+                   data = ozempic_survey_data_clean)
+
+
+# Model 1 Partial Proportional Model For Outcome Variable 1. 
+ppo_model <- vglm(
+  opinion_collapsed ~ gender + genetics_collapsed + OZread + partylean + income_score,
+  family = cumulative(parallel = FALSE ~ OZread + genetics_collapsed, reverse = TRUE),
+  data = ozempic_survey_data_clean 
+)
+summary(ppo_model)
+
+```
+
+Psuedo R-squared values were calculated using nagelkerke() function in R. 
+```{r}
+#Calculated psuedo R-squared using nagelkerke() function. 
+nagelkerke(ppo_model)
+```
+
+Akaike Information Criterion (AIC) calcluated for both the null model. 
+```{r}
+AIC(null_model)
+```
+
+AIC was calculated for experimental model. 
+```{r}
+AIC(ppo_model)
+```
+
+#### Model 1 Probability Effect Plots
+```{r plot-prob-outcome1, fig.height=14, fig.width = 13, fig.align = 'center'}
+# Creating probability plots for each predictor variable for our first outcome variable. How likely are participants to respond with more pessimism to the question: Over the long run, how much do you think drugs like Ozempic will do to help obesity in America? 
+
+GENDERpred <- predict_response(ppo_model, terms = c("gender"))
+gender_pred_plot <- plot(GENDERpred, facets = TRUE, connect_lines = TRUE, one_plot = TRUE, color = 'darkorange')
+
+genetics_collapsedpred <- predict_response(ppo_model, terms = c("genetics_collapsed"))
+genetics_collapsed_pred_plot <- plot(genetics_collapsedpred, facets = TRUE, connect_lines = TRUE, one_plot = TRUE, color = 'darkorange')
+
+OZreadpred <- predict_response(ppo_model, terms = c("OZread"))
+OZread_pred_plot <- plot(OZreadpred, facets = TRUE, connect_lines = TRUE, one_plot = TRUE, color = 'darkorange')
+
+partyleanpred <- predict_response(ppo_model, terms = c("partylean"))
+partylean_pred_plot <- plot(partyleanpred, facets = TRUE, connect_lines = TRUE, one_plot = TRUE, color = 'darkorange')
+
+income_scorepred <- predict_response(ppo_model, terms = c("income_score"))
+income_score_pred_plot <- plot(income_scorepred, facets = TRUE, connect_lines = TRUE, one_plot = TRUE, color = 'darkorange')
+
+
+# Combining probability plots for all predictor variables
+grid.arrange(gender_pred_plot, genetics_collapsed_pred_plot, OZread_pred_plot, partylean_pred_plot, income_score_pred_plot, ncol = 2) 
+
+```
+For the Partial Proportional Odds Model 1, the dependent variable was participants' level of pessimism towards the impact weight loss drugs like Ozempic on reducing obesity in America. Since logistic regression does not yield a traditional R-squared value, two pseudo R-squared measures were used to evaluate model fit. Results showed that the predictors accounted for 3.9% to 10% of the variance in pessimism, based on McFadden’s pseudo R² = 0.0395 and Nagelkerke’s pseudo R² = 0.10. The overall model was statistically significant (p < .001, likelihood ratio test: p = 5.00e−35). Model fit was further supported by a reduction in the Akaike Information Criterion (AIC): the experimental model had a lower AIC (5036) than the null model (5210), indicating that the inclusion of predictors improved the model’s performance.
+
+The results of the partial proportional odds model indicated that being female was significantly associated with lower odds of pessimism toward weight-loss medications like Ozempic (b = –0.17, p = 0.004; OR ≈ 0.85). Similarly, greater belief in genetic causes of obesity was linked to reduced pessimism (b = –0.79, p < 0.001; OR ≈ 0.45).
+
+Increased exposure to information about these medications was also associated with lower levels of pessimism (b = –0.66, p < 0.001; OR ≈ 0.52). However, at the highest threshold of the outcome (i.e., participants who responded 'Nothing at all', expressing the greatest pessimism), the association between exposure and pessimism was non-significant and slightly reversed (b = 0.07, p = 0.56), suggesting that the relationship may vary across levels of pessimism.
+
+Identifying as a Democrat (compared to Republican) was associated with lower odds of pessimism (b = –0.24, p < 0.001; OR ≈ 0.79). Higher income was not significantly related to pessimism (b = –0.12, p = 0.056), though the effect was approaching significance.
+
+Results can be interpreted visually from the probability effect plots above. 
+
+
+#### Results and Probability Plots for Partial Proportional Odds Model 2: (dependent variable = *OZUSE_a_W142*) 
+This model examines the relationship between the 5 predictor variables and the level of *skepticism* in participant's responses. 
+
+```{r}
+# Null Model Created for Model 2
+null_model2 <- vglm(
+  OZUSE_a_W142 ~ 1,
+  family = cumulative(parallel = FALSE,  reverse = TRUE),
+  data = ozempic_survey_data_clean, 
+)
+
+
+# Model 2 Partial Proportional Model For Outcome Variable 2. 
+ozuse_ppomodel <- vglm(
+  OZUSE_a_W142 ~ gender + genetics_collapsed + OZread + partylean + income_score,
+  family = cumulative(parallel = FALSE ~ OZread + genetics_collapsed + partylean,  reverse = TRUE),
+  data = ozempic_survey_data_clean, 
+)
+summary(ozuse_ppomodel)
+
+```
+
+Pseudo R-squared calculated using nagelkerke() function in R. 
+```{r}
+#Psuedo R-Squared
+nagelkerke(ozuse_ppomodel)
+```
+
+AIC calculated for null model. 
+```{r}
+AIC(null_model2)
+```
+
+
+AIC calculated for experimental model. 
+```{r}
+AIC(ozuse_ppomodel)
+```
+
+
+#### Model 2 Probability Effect Plots
+```{r plot-prob-outcome2, fig.height=15, fig.width=13, fig.align='center'}
+# Creating probability plots for all predictor variables for outcome variable 2. How likely are participants to respond with more skepticism to the quesstion: Do you think drugs like Ozempic are a good treatment option for people with obesity or other weight related health issues? 
+
+genderpred2 <- predict_response(ozuse_ppomodel, terms = c("gender"))
+genderpredplot2 <- plot(genderpred2, connect_lines = TRUE, color = "darkorange")
+
+genetics_collapsedpred2 <- predict_response(ozuse_ppomodel, terms = c("genetics_collapsed"))
+genetics_collapsed_pred_plot2 <- plot(genetics_collapsedpred2, connect_lines = TRUE, color = "darkorange")
+
+OZreadpred2 <- predict_response(ozuse_ppomodel, terms = c("OZread"))
+OZread_pred_plot2 <- plot(OZreadpred2, connect_lines = TRUE, color = "darkorange")
+
+partyleanpred2 <- predict_response(ozuse_ppomodel, terms = c("partylean"))
+partylean_pred_plot2 <- plot(partyleanpred2, connect_lines = TRUE, color = "darkorange")
+
+
+income_scorepred2 <- predict_response(ozuse_ppomodel, terms = c("income_score"))
+income_score_pred_plot2 <- plot(income_scorepred2, connect_lines = TRUE, color = 'darkorange')
+
+
+# Combining probability plots of all 5 predictor variables
+grid.arrange(genderpredplot2, genetics_collapsed_pred_plot2, OZread_pred_plot2, partylean_pred_plot2,  income_score_pred_plot2, ncol = 2) 
+
+```
+For the Partial Proportional Odds Model 2, the dependent variable was participants' level of skepticism towards new weight loss drugs like Ozempic (OZUSE_a_W142), as indicated by the degree to which they believe the drugs are a good option for those struggling with obesity or other weight-related health issues. Again, multiple measures of psuedo R-squared were utilized to evaluate model fit. Results showed that the predictors accounted for 5% to 10% of the variation in responses, based on McFadden’s pseudo R² = 0.049 and Nagelkerke’s pseudo R² = 0.10. The overall model was statistically significant (p < .001, likelihood ratio test: p = 1.4449e-35).  Model fit was further supported by a reduction in the AIC: the experimental model had a lower AIC (3903) than the null model (4077), indicating that the inclusion of predictors improved the model’s performance.
+
+In Model 2, gender was not significantly associated with skepticism towards weight loss medications (b = -0.10, p = 0.09, OR = 0.90), although this effect may be approaching significance. Belief in genetic causes of obesity showed a non-parallel effect across outcome thresholds. Specifically, greater attribution of obesity to genetics was associated with lower odds of responding “Not sure” about Ozempic being a good option for those struggling with obesity (b = –0.57, p < 0.001, OR = 0.56), but showed no significant effect at the most skeptical response level (b = –0.09, p = 0.60, OR = 0.91).
+
+Greater exposure to information about weight-loss medications was associated with lower skepticism, as indicated by a significant negative coefficient (b = –0.69, p < 0.001, OR = 0.50). Similarly, identifying as a Democrat (vs. Republican) was associated with lower odds of expressing skepticism (b = –0.32, p < 0.001, OR = 0.72). Finally, lower income was significantly related to higher skepticism toward Ozempic (b = –0.55, p < 0.001, OR = 0.58).
+
+Results can be interpeted visually through the probability effects plots above. 
+
+
+
+## Discussion
+### Interpretation of Results 
+
+This project examined public perceptions of new weight loss drugs like Ozempic and their potential to address obesity and identified key demographic and attitudinal predictors of skepticism/support and pessimism/optimism using partial proportional odds logistic regression. 
+
+The results of the analysis showed that, overall, the strongest predictors of negative attitudes towards GLP-1 receptor antagonists like Ozempic were less believe in a genetic factor in weight gain and less exposure to information regarding the weight loss drugs.  
+
+Results suggest that individuals who believe less in genetic causes of obesity, have lower exposure to information about Ozempic, lean politically conservative, or report lower income are more likely to view the drug with skepticism. Conversely, belief in genetic explanations and greater familiarity with Ozempic are associated with more optimistic views. These findings highlight the importance of addressing informational gaps and public beliefs in clinical and public health communication. As medications like Ozempic become more prominent in obesity treatment, understanding these attitudes can help guide equitable access, reduce stigma, and support more personalized conversations between patients and healthcare providers.
+
+While the majority of participants expressed support for Ozempic, the presence of meaningful variation in levels of skepticism and pessimism allowed for some key predictors to emerge. Understanding the factors that shape skepticism and pessimism towards weight loss medications remains essential for designing inclusive public health messaging and addressing potential barriers to treatment acceptance.
+
+
+
+## Limitations and Where I Would Like to Improve
+This project is based on secondary survey data, which limits the control over how variables were measured and may affect how precisely they capture the constructs of interest. Additionally, the cross-sectional design prevents any conclusions about causality. Some predictor variables were reverse-coded, which may introduce interpretive complexity. In future research, I would conduct my own survey to test whether these results hold true in different populations and by using slightly different question wording to probe the same core beliefs and attitudes. This would help validate the findings and improve the reliability of the measures used.
+
+My understanding of the mathematics and mechanics behind ordinal logistic regression may have limited my interpretation of the results, which may have led to mistakes. Feel free to email me at archit.nangavaram01@utrgv.edu if you find any errors in my statistical analysis. 
+
+Lastly, there are many skills I am hoping to acquire as I am learning R. One such skill that would have been invaluable in this project is the creation of custom functions for repetitive tasks. Tasks like changing factor levels, and creating graphs would have been much simpler and less prone to mistakes. 
+
+
+### References
+1. Lee, E. (2019, May 29). Ordinal logistic regression on World happiness report. Medium. https://medium.com/evangelinelee/ordinal-logistic-regression-on-world-happiness-report-221372709095 
+2. Rusid, R. S. (2023, September 10). Proportional odds and partial proportional odds for ordinal data analysis. Medium. https://medium.com/@rais.sulaiman/proportional-odds-and-partial-proportional-odds-for-ordinal-data-analysis-432b2269ffb6 
+3. Ordinal Logistic Regression | R Data Analysis Examples. OARC Stats. (n.d.). https://stats.oarc.ucla.edu/r/dae/ordinal-logistic-regression/ 
+4. Christiansen, P. (n.d.). R tutorial: Ordinal regression. YouTube. https://www.youtube.com/watch?v=rrRrI9gElYA&t=742s 
+
