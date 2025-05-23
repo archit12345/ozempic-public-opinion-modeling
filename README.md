@@ -4,7 +4,8 @@
 
 This project explores the demographic and attitudinal predictors of public skepticism toward weight-loss medications such as Ozempic. Using survey data from the Pew Research Center (American Trends Panel, Wave 142), I fit ordinal and partial proportional odds logistic regression models to understand what factors make people more likely to view these medications with greater skepticism or pessimism towards their potential impact on reducing obesity in America.
 
-The final models relax the proportional odds assumption where necessary and identify strong predictors of skepticism, including political affiliation, exposure to information about the drugs, income, and beliefs about the causes of obesity.
+Link to project on RPubs: https://rpubs.com/architn01/1313806
+
 
 ##  Research Question
 
