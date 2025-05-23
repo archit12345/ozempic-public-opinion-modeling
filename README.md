@@ -62,6 +62,7 @@ Link to project on RPubs: https://rpubs.com/architn01/1313806
 ## Author
 
 **Archit Nangavaram**
+
 Senior Undergraduate in Psychology minoring in Addiction Studies and Expressive Arts Therapy 
-📧 [archit.nangavaram01@utrgv.edu]  
-🔗 [https://www.linkedin.com/in/archit-nangavaram-10b899293/]
+Email: archit.nangavaram01@utrgv.edu 
+LinkedIn: https://www.linkedin.com/in/archit-nangavaram-10b899293/
