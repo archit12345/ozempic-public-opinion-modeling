@@ -23,7 +23,7 @@ Link to project on RPubs: https://rpubs.com/architn01/1313806
   - Gender  
   - Political affiliation  
   - Income  
-  - Exposure to Ozempic-related information 
+  - Exposure to information about weight loss medications like Ozempic & Wegovy
   - Belief in genetic causes of obesity  
 
 - **Statistical Techniques:**  
