@@ -38,7 +38,7 @@ Link to project on RPubs: https://rpubs.com/architn01/1313806
   - Codebook for raw survey data (ATP W142 Codebook.xlsx)
   - Information about the methodology of the American Trends Panel survey (ATP W142 Methodology.pdf)
   - Cleaned dataset (ozempic_survey_data_clean.csv)
-  - RMarkdown File (AmericanOzempicSurveydraft.html)
+  - RMarkdown File (AmericanOzempicSurveydraft.rmd)
   - R code used for the project
 
 ## Key Findings
