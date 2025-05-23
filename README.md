@@ -9,7 +9,7 @@ Link to project on RPubs: https://rpubs.com/architn01/1313806
 
 ##  Research Question
 
-> What factors predict whether someone is skeptical of weight-loss medications like Ozempic?
+> What factors predict whether someone is skeptical of weight-loss medications like Ozempic? What factor predict whether someone is pessimistic regarding the potential impact weight-loss medications like Ozempic might have on reducing obesity in America? 
 
 ## Methods
 
