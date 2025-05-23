@@ -44,7 +44,7 @@ Link to project on RPubs: https://rpubs.com/architn01/1313806
 ## Key Findings
 
 - People who are **more exposed to information about the drugs**, **identify as Democrats**, and **believe obesity has genetic causes** are significantly **less skeptical** of Ozempic.
-- **Lower-income**, **Republican**, and **male** participants showed **greater skepticism** toward the treatment.
+- **Lower-income**, **Republican**, and **male** participants showed **greater skepticism** toward the medications.
 - The partial proportional odds model provided better fit and more accurate estimates than a standard ordinal logistic regression.
 
 
